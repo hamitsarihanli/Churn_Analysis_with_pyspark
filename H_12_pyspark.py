@@ -22,13 +22,13 @@ pd.options.display.max_columns = None
 findspark.init("C:\Spark")
 
 spark = SparkSession.builder \
-    .master("spark://192.168.1.40:4040") \
+    .master("spark://1.1.1.1:4040") \
     .appName("pyspark-shell") \
     .getOrCreate()
 
 sc = spark.sparkContext
 sc
-spark_df = spark.read.csv(r'C:\Users\Administrator\Desktop\churn2.csv', header=True, inferSchema=True)
+spark_df = spark.read.csv(r'...\churn2.csv', header=True, inferSchema=True)
 spark_df.show()
 
 
@@ -36,10 +36,10 @@ spark_df.show()
 # EDA
 ##################################################
 
-# Gözlem ve değişken sayısı
+# shape of data
 print("Shape: ", (spark_df.count(), len(spark_df.columns)))
 
-# Değişken tipleri
+# types
 spark_df.printSchema()
 spark_df.dtypes
 
@@ -48,52 +48,47 @@ spark_df.head(5)
 spark_df.show(5)
 spark_df.take(5)
 
-# Değişken isimlerinin küçültülmesi
 spark_df = spark_df.toDF(*[c.lower() for c in spark_df.columns])
 spark_df.show(5)
 
 
-# özet istatistikler
+# summary statistics
 spark_df.describe().show()
 
-# sadece belirli değişkenler için özet istatistikler
 spark_df.describe(["age", "exited"]).show()
 
-# Kategorik değişken sınıf istatistikleri
+# statistics for categorical variables
 spark_df.groupby("exited").count().show()
 
-# Eşsiz sınıflar
+# unique
 spark_df.select("exited").distinct().show()
 
-# select(): Değişken seçimi
+# select():
 spark_df.select("age", "surname").show(5)
 
-# filter(): Gözlem seçimi / filtreleme
+# filter():
 spark_df.filter(spark_df.age > 40).show()
 spark_df.filter(spark_df.age > 40).count()
 
-# groupby işlemleri
+# groupby
 spark_df.groupby("exited").count().show()
 spark_df.groupby("exited").agg({"age": "mean"}).show()
 spark_df.select("age").dtypes
 
-# Tüm numerik değişkenlerin seçimi ve özet istatistikleri
 num_cols = [col[0] for col in spark_df.dtypes if col[1] != 'string']
 spark_df.select(num_cols).describe().toPandas().transpose()
 
-# Tüm kategorik değişkenlerin seçimi ve özeti
 cat_cols = [col[0] for col in spark_df.dtypes if col[1] == 'string']
 
 for col in cat_cols:
     spark_df.select(col).distinct().show()
 
-# Churn'e göre sayısal değişkenlerin özet istatistikleri
 for col in num_cols:
     spark_df.groupby("exited").agg({col: "mean"}).show()
     
 
 ##################################################
-# SQL İşlemleri
+# SQL
 ##################################################
 
 spark_df.createOrReplaceTempView("tbl_df")
@@ -117,13 +112,12 @@ spark_df.select([count(when(col(c).isNull(), c)).alias(c) for c in spark_df.colu
 
 len(spark_df.columns)
 
-# eksik değere sahip satırları silmek
+# remove nan observation
 spark_df.dropna().show()
 
-# tüm veri setindeki eksiklikleri belirli bir değerle doldurmak
+# fillna
 spark_df.fillna(50).show()
 
-# eksik değerleri değişkenlere göre doldurmak
 spark_df.na.fill({'age': 50, 'surname': 'unknown'}).show()
 
 ##################################################
@@ -149,13 +143,6 @@ from pyspark.ml.feature import Bucketizer
 
 spark_df.select('age').describe().toPandas().transpose()
 
-# bucketizer age_cat hata verdiginden
-# bucketizer = Bucketizer(splits=[0, 35, 45, 65], inputCol="age", outputCol="age_cat")
-# spark_df = bucketizer.setHandleInvalid("keep").transform(spark_df)
-# spark_df.show(20)
-
-# spark_df = spark_df.withColumn('age_catt', spark_df.age_cat + 1)
-
 spark_df = spark_df.withColumn('age_cat', when(spark_df['age'] < 35, 1)
                                .when((spark_df['age'] >= 35) & (spark_df['age'] < 45), 2)
                                .when((spark_df['age'] >= 45) & (spark_df['age'] < 65), 3)
@@ -168,13 +155,13 @@ spark_df.dtypes
 spark_df = spark_df.withColumn("age_cat", spark_df["age_cat"].cast("integer"))
 
 ############################
-# when ile Değişken Türetmek (segment)
+# feature creation using when
 ############################
 spark_df.columns
 spark_df = spark_df.withColumn('segment', when(spark_df['tenure'] < 5, "segment_b").otherwise("segment_a"))
 
 ############################
-# when ile Değişken Türetmek (age_cat_2)
+# feature creation using when
 ############################
 
 
@@ -224,16 +211,16 @@ encoder = OneHotEncoder(inputCols=["hascrcard"], outputCols=["hascrcard_cat_ohe"
 spark_df = encoder.fit(spark_df).transform(spark_df)
 
 ##################################################
-# TARGET'ın Tanımlanması
+# definition of TARGET
 ##################################################
 
-# TARGET'ın tanımlanması
+# definition of TARGET
 stringIndexer = StringIndexer(inputCol='exited', outputCol='label')
 temp_sdf = stringIndexer.fit(spark_df).transform(spark_df)
 spark_df = temp_sdf.withColumn("label", temp_sdf["label"].cast("integer"))
 
 ##################################################
-# Feature'ların Tanımlanması
+# definition of Features
 ##################################################
 spark_df.columns
 cols = ['creditscore', 'geography_label', 'gender_label', 'age',
